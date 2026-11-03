@@ -96,8 +96,8 @@
     }
 
     // 화면 좌표(러그 로컬 px)에서 가장 위에 있는 불투명 입자를 고른다
-    pick(sx, sy) {
-      const { pos, n } = this; const R = 12 + this.h * 0.8; let best = -1, bz = -1e9;
+    pick(sx, sy, extra = 0) {
+      const { pos, n } = this; const R = 12 + this.h * 0.8 + extra; let best = -1, bz = -1e9;
       for (let k = 0; k < n; k++) {
         if (this.alpha[k] < 24) continue;
         const z = pos[3 * k + 2];
