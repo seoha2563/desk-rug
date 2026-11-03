@@ -52,6 +52,13 @@
   h2 a.n { color: var(--green); text-decoration: none; margin-right: .4em; }
   p { margin: 0 0 10px; }
   ul { margin: 0 0 10px; padding-left: 1.4em; }
+  details.fold { margin: 14px 0 10px; border: 1px solid #ccc; background: #fff; }
+  details.fold summary { cursor: pointer; padding: 8px 12px; background: #f5f5f5; font-weight: 700; border-left: 4px solid var(--green); list-style: none; }
+  details.fold summary::-webkit-details-marker { display: none; }
+  details.fold summary::before { content: "▾"; display: inline-block; width: 1.2em; color: #666; transition: transform .15s; }
+  details.fold:not([open]) summary::before { transform: rotate(-90deg); }
+  details.fold[open] summary { border-bottom: 1px solid #ddd; }
+  details.fold ul { margin: 10px 0 8px; padding: 0 14px 0 2.2em; }
   li { margin: 2px 0; }
 
   footer { border-top: 1px solid var(--line); background: #f7f7f7; color: #777; font-size: 13px; padding: 22px 16px 80px; text-align: center; }
@@ -149,11 +156,23 @@
     <ul>
       <li>시기마다 하나의 캐릭터에 꽂혀서 관련 선물을 하면 세상 행복해 한다.</li>
       <li>입대한 후로 헬창이 되어서 아침, 점심, 저녁으로 헬스장에 출석한다.</li>
+      <li>몸을 움직이는 운동을 매우 좋아한다. 위에 언급한 헬스도 비슷한 맥락으로 좋아한다. 유산소 운동은 별로 좋아하지 않는다.</li>
       <li>하늘이에게 영원히 말하지 못할 비밀이 있다고 했다. (캐물어도 무덤까지 들고 갈 듯)</li>
       <li>마인크래프트에 모드를 깔아서 플레이하는 것을 좋아한다. 최근 치즐 모드를 도전했다가 실행에 실패한 경력이 있다.</li>
       <li>유행에 민감하다. 말랑이, 두쫀쿠, 버터떡부터 L을 가져가, 줴줴이야, 티~원까지 진정한 MZ의 면모를 보여주고 있다.</li>
-      <li>해산물을 굉장히 좋아하지만 고기를 더 좋아한다.</li>
+      <li>롤 경기를 자주 본다. 롤 팀 중에서는 한화팀을 가장 좋아하며, 한화팀의 정글 유저인 피넛의 팬이다.</li>
+      <li>지렁이를 싫어한다.</li>
+      <li>흔히 말하는 왼얼사이다. 이유는 눈 때문이다.</li>
     </ul>
+
+    <details class="fold" open>
+      <summary>음식 취향</summary>
+      <ul>
+        <li>해산물을 굉장히 좋아하지만 고기를 더 좋아한다. 다만 비계 부분은 싫어하여 하늘이와 원만한 합의 끝에 비계 부위는 하늘이가 다 먹게 되었다. (하늘이는 비계를 짱짱 좋아한다.)</li>
+        <li>떡, 화과자, 양갱, 비비빅 등을 좋아하여 생각보다 늙은 입맛을 보유하고 있다.</li>
+        <li>메론을 매우 좋아한다.</li>
+      </ul>
+    </details>
 
     <h2 id="sec4"><a class="n" href="#top">4.</a>논란</h2>
     <p>본인이 고백한 날을 기억하지 못한다. 뒤늦게 메모장에 적어놨지만 하늘이는 서운함을 감추지 못했다.</p>
