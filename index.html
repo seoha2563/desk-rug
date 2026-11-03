@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Desk Rug - 접히고 구겨지는 러그</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: radial-gradient(ellipse at 70% 110%, #1b4a78 0%, #0a1a30 35%, #02050b 75%);
+    font: 13px/1.4 "Segoe UI", "Malgun Gothic", sans-serif; color: #222;
+    user-select: none;
+  }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  #panel {
+    position: fixed; top: 16px; left: 16px; width: 230px; padding: 14px;
+    background: rgba(250,250,250,.94); border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.45);
+  }
+  #panel h1 { font-size: 14px; margin: 0 0 10px; }
+  #panel label { display: block; margin-top: 10px; font-size: 12px; color: #555; }
+  #panel label span { float: right; color: #888; }
+  #panel input[type=range] { width: 100%; margin: 2px 0 0; }
+  #panel .row { display: flex; gap: 6px; margin-top: 10px; }
+  #panel button {
+    flex: 1; padding: 7px 0; border: 0; border-radius: 7px; cursor: pointer;
+    background: #e4e4e8; font: inherit;
+  }
+  #panel button:hover { background: #d6d6dc; }
+  #hint { margin-top: 10px; font-size: 11.5px; color: #777; }
+  #drop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+          background: rgba(0,0,0,.55); color: #fff; font-size: 22px; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="panel">
+  <h1>Desk Rug</h1>
+  <div class="row" style="margin-top:0">
+    <button id="btnOpen">이미지 열기</button>
+    <button id="btnDefault">기본 러그</button>
+  </div>
+  <input id="file" type="file" accept="image/*" hidden>
+
+  <label>크기 <span id="vSize"></span>
+    <input id="size" type="range" min="200" max="1100" value="520"></label>
+  <label>뻣뻣함 <span id="vStiff"></span>
+    <input id="stiff" type="range" min="5" max="90" value="35"></label>
+  <div class="row"><button id="btnFlat">펴기</button></div>
+
+  <div id="hint">
+    <b>가장자리/모서리</b>를 끌면 들어서 접히고, <b>안쪽</b>을 끌면 눌러 밀려 구겨집니다.
+    접힌 쪽은 다시 잡아 끌면 펴져요. Alt·우클릭 드래그는 통째로 이동, 더블클릭은 펴기.<br>
+    이미지는 드래그&amp;드롭 / 붙여넣기(Ctrl+V)도 됩니다. 투명 PNG 권장.
+  </div>
+</div>
+<div id="drop">이미지를 놓으세요</div>
+
+<script src="cloth.js"></script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const canvas = $('c');
+const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: true, depth: true });
+if (!gl) document.body.insertAdjacentHTML('beforeend', '<p style="color:#fff;padding:300px 40px">WebGL2를 지원하지 않는 환경입니다.</p>');
+
+/* ---------------------------------------------------------------- shaders */
+const VS = `#version 300 es
+precision highp float;
+in vec2  a_uv;
+in vec3  a_pos;      // 시뮬레이션 결과 위치 (러그 로컬 px, z = 높이)
+in vec3  a_nrm;
+in float a_ao;
+uniform vec2  u_origin, u_view, u_tap;
+uniform float u_pass;
+out vec2  v_uv;
+out vec3  v_n;
+out float v_ao;
+void main() {
+  vec3 q = a_pos;
+  v_uv = a_uv; v_n = a_nrm; v_ao = a_ao;
+  vec2 s;
+  if (u_pass < 0.5) s = u_origin + q.xy + vec2(4.0, 7.0) + u_tap + vec2(0.45, 0.7) * q.z;   // 그림자
+  else              s = u_origin + q.xy + vec2(0.12, -0.45) * q.z;                          // 본체
+  gl_Position = vec4(s.x / u_view.x * 2.0 - 1.0, 1.0 - s.y / u_view.y * 2.0,
+                     clamp(-q.z / 500.0, -0.99, 0.99), 1.0);
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+in vec2  v_uv;
+in vec3  v_n;
+in float v_ao;
+uniform sampler2D u_tex;
+uniform float u_pass, u_shadowA, u_backDark;
+out vec4 o;
+void main() {
+  vec4 c = texture(u_tex, v_uv);            // 프리멀티플라이드 알파
+  if (c.a < 0.02) discard;
+  if (u_pass < 0.5) { o = vec4(0.0, 0.0, 0.0, c.a * u_shadowA); return; }
+
+  vec3 n = normalize(v_n);
+  bool back = n.z < 0.0;
+  vec3 nv = back ? -n : n;
+  vec3 L = normalize(vec3(-0.35, -0.55, 0.75));
+  float diff = max(dot(nv, L), 0.0);
+  float spec = pow(max(dot(nv, normalize(L + vec3(0.0, 0.0, 1.0))), 0.0), 28.0) * 0.05;
+  float ao = clamp(v_ao * 0.4, 0.0, 0.7) * 0.6;      // 다른 천 아래/주름 사이는 어둡게
+  float shade = (0.42 + 0.78 * diff) * (1.0 - ao);
+
+  vec3 rgb = c.rgb;
+  if (back) {                               // 러그 뒷면: 어둡고 살짝 탈색
+    float lum = dot(rgb, vec3(0.3, 0.59, 0.11));
+    rgb = mix(rgb, vec3(lum), 0.3) * u_backDark;
+  }
+  o = vec4(clamp(rgb * shade + spec * c.a, 0.0, 1.0), c.a);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+const U = {};
+for (const n of ['u_origin','u_view','u_tap','u_pass','u_tex','u_shadowA','u_backDark']) U[n] = gl.getUniformLocation(prog, n);
+
+/* ------------------------------------------------------- mesh (from cloth) */
+let cloth = null, indexCount = 0;
+const vao = gl.createVertexArray();
+const vboUV = gl.createBuffer(), vboPos = gl.createBuffer(), vboNrm = gl.createBuffer(), vboAO = gl.createBuffer(), ibo = gl.createBuffer();
+
+function attr(name, buf, size, usage, data) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, data, usage);
+  const l = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, gl.FLOAT, false, 0, 0);
+}
+function buildCloth() {
+  cloth = new Cloth(rugW, rugH, { bend: +$('stiff').value / 100 });
+  cloth.setAlphaFn(maskAlpha);
+  const { nx, ny, n } = cloth;
+  const uvs = new Float32Array(n * 2);
+  for (let j = 0, k = 0; j < ny; j++) for (let i = 0; i < nx; i++) { uvs[k++] = i / (nx - 1); uvs[k++] = j / (ny - 1); }
+  const idx = new Uint32Array((nx - 1) * (ny - 1) * 6);
+  for (let j = 0, k = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    const a = j * nx + i, b = a + 1, c = a + nx, d = c + 1;
+    idx.set([a, c, b, b, c, d], k); k += 6;
+  }
+  indexCount = idx.length;
+  gl.bindVertexArray(vao);
+  attr('a_uv', vboUV, 2, gl.STATIC_DRAW, uvs);
+  attr('a_pos', vboPos, 3, gl.DYNAMIC_DRAW, cloth.pos);
+  attr('a_nrm', vboNrm, 3, gl.DYNAMIC_DRAW, cloth.nrm);
+  attr('a_ao', vboAO, 1, gl.DYNAMIC_DRAW, cloth.ao);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  grabMode = null;
+}
+function uploadCloth() {
+  cloth.computeNormals();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vboPos); gl.bufferSubData(gl.ARRAY_BUFFER, 0, cloth.pos);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vboNrm); gl.bufferSubData(gl.ARRAY_BUFFER, 0, cloth.nrm);
+  gl.bindBuffer(gl.ARRAY_BUFFER, vboAO);  gl.bufferSubData(gl.ARRAY_BUFFER, 0, cloth.ao);
+}
+
+/* --------------------------------------------------------------- texture */
+const tex = gl.createTexture();
+let imgW = 1, imgH = 1;
+let maskData = null, maskW = 0, maskH = 0;   // 클릭 판정/가장자리 계산용 알파 마스크
+
+function maskAlpha(u, v) {
+  if (!maskData) return 255;
+  const x = Math.min(maskW - 1, Math.max(0, Math.floor(u * maskW))), y = Math.min(maskH - 1, Math.max(0, Math.floor(v * maskH)));
+  return maskData[(y * maskW + x) * 4 + 3];
+}
+
+// 어떤 이미지든 캔버스를 거쳐 올림: 크기 제한 + 알파 프리멀티플라이 일관성 확보
+function setTextureFrom(source) {
+  const sw = source.naturalWidth || source.width, sh = source.naturalHeight || source.height;
+  const sc = Math.min(1, 2048 / Math.max(sw, sh));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(sw * sc)); c.height = Math.max(1, Math.round(sh * sc));
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(source, 0, 0, c.width, c.height);
+
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  imgW = c.width; imgH = c.height;
+  const m = document.createElement('canvas');
+  const ms = Math.min(1, 256 / Math.max(imgW, imgH));
+  maskW = Math.max(1, Math.round(imgW * ms)); maskH = Math.max(1, Math.round(imgH * ms));
+  m.width = maskW; m.height = maskH;
+  const mg = m.getContext('2d', { willReadFrequently: true });
+  mg.drawImage(c, 0, 0, maskW, maskH);
+  maskData = mg.getImageData(0, 0, maskW, maskH).data;
+}
+
+function loadFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => { setTextureFrom(img); URL.revokeObjectURL(url); layout(); buildCloth(); };
+  img.onerror = () => alert('이미지를 읽을 수 없습니다.');
+  img.src = url;
+}
+
+function makeDefaultRug() {
+  const W = 1024, H = 640, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const bx = 74, by = 16, bw = W - 148, bh = H - 32;
+  // 술(프린지)
+  g.strokeStyle = '#eadfc4'; g.lineWidth = 3.2; g.lineCap = 'round';
+  for (let y = by + 8; y < by + bh - 4; y += 9) {
+    for (const s of [-1, 1]) {
+      const x0 = s < 0 ? bx + 4 : bx + bw - 4;
+      g.beginPath(); g.moveTo(x0, y);
+      g.quadraticCurveTo(x0 + s * 34, y + Math.sin(y * 1.7) * 7, x0 + s * 64, y + Math.cos(y * 2.9) * 9);
+      g.stroke();
+    }
+  }
+  g.fillStyle = '#7d1f2b'; g.fillRect(bx, by, bw, bh);
+  const frame = (inset, w, col) => { g.strokeStyle = col; g.lineWidth = w; g.strokeRect(bx + inset, by + inset, bw - inset * 2, bh - inset * 2); };
+  frame(5, 6, '#eadfc4'); frame(30, 34, '#1d3a5c'); frame(54, 4, '#eadfc4'); frame(64, 10, '#c79a3a');
+  g.save(); g.beginPath(); g.rect(bx + 80, by + 80, bw - 160, bh - 160); g.clip();
+  const cx = W / 2, cy = H / 2;
+  const diamond = (rx, ry, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(cx, cy - ry); g.lineTo(cx + rx, cy); g.lineTo(cx, cy + ry); g.lineTo(cx - rx, cy); g.closePath(); g.fill(); };
+  diamond(330, 210, '#c79a3a'); diamond(310, 195, '#1d3a5c'); diamond(255, 158, '#7d1f2b');
+  diamond(205, 126, '#eadfc4'); diamond(190, 116, '#2d6a5b'); diamond(120, 74, '#7d1f2b'); diamond(52, 32, '#c79a3a');
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2;
+    g.fillStyle = '#eadfc4'; g.beginPath(); g.arc(cx + Math.cos(a) * 160, cy + Math.sin(a) * 100, 6, 0, 7); g.fill();
+  }
+  g.restore();
+  for (let y = by; y < by + bh; y += 3) { g.fillStyle = (y / 3) % 2 ? 'rgba(0,0,0,.07)' : 'rgba(255,255,255,.035)'; g.fillRect(bx, y, bw, 1.5); }
+  for (let i = 0; i < 9000; i++) { g.fillStyle = Math.random() < .5 ? 'rgba(0,0,0,.08)' : 'rgba(255,255,255,.06)'; g.fillRect(bx + Math.random() * bw, by + Math.random() * bh, 2, 2); }
+  return c;
+}
+
+/* ------------------------------------------------------------ layout/state */
+let dpr = 1, vw = 0, vh = 0;
+let rugW = 520, rugH = 325, originX = 0, originY = 0;
+const LIFT = 30;                          // 모서리를 들어 올리는 높이(px)
+let grabMode = null;                      // 'lift' | 'push' | 'move'
+let lastP = null;
+
+function layout() {
+  const sizeChanged = +$('size').value !== rugW || !cloth;
+  rugW = +$('size').value; rugH = rugW * imgH / imgW;
+  vw = innerWidth; vh = innerHeight; dpr = Math.min(devicePixelRatio || 1, 2);
+  canvas.width = Math.round(vw * dpr); canvas.height = Math.round(vh * dpr);
+  originX = Math.round((vw - rugW) / 2 + 100);   // 패널을 피해 약간 오른쪽
+  originY = Math.round((vh - rugH) / 2 + 10);
+  $('vSize').textContent = rugW + 'px';
+  $('vStiff').textContent = $('stiff').value;
+  if (sizeChanged || cloth.H !== rugH) buildCloth();
+}
+
+/* ----------------------------------------------------------------- input */
+const local = e => ({ x: e.clientX - originX, y: e.clientY - originY });
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+canvas.addEventListener('pointerdown', e => {
+  const p = local(e), idx = cloth.pick(p.x, p.y);
+  if (idx < 0) return;
+  if (e.button === 2 || e.altKey) { grabMode = 'move'; lastP = p; }
+  else {
+    // 가장자리거나, 이미 접혀서 위에 올라가 있는 천이면 들어서 옮긴다 (아래 천을 뚫고 끌리지 않게)
+    grabMode = (cloth.edge[idx] || cloth.pos[3 * idx + 2] > 1.5 * cloth.d) ? 'lift' : 'push';
+    cloth.grab(idx, p.x, p.y, grabMode === 'lift' ? LIFT : 0, grabMode === 'lift' ? 2.5 : 3.5);
+  }
+  try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  canvas.style.cursor = 'grabbing';
+});
+canvas.addEventListener('pointermove', e => {
+  const p = local(e);
+  if (grabMode === 'move') { cloth.translate(p.x - lastP.x, p.y - lastP.y); lastP = p; }
+  else if (grabMode) cloth.dragTo(p.x, p.y);
+  else { const idx = cloth.pick(p.x, p.y); canvas.style.cursor = idx < 0 ? 'default' : cloth.edge[idx] ? 'grab' : 'move'; }
+});
+function release() { if (!grabMode) return; cloth.release(); grabMode = null; canvas.style.cursor = 'default'; }
+canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointercancel', release);
+canvas.addEventListener('dblclick', e => { const p = local(e); if (cloth.pick(p.x, p.y) >= 0) cloth.flatten(); });
+
+$('btnOpen').onclick = () => $('file').click();
+$('file').onchange = e => { loadFile(e.target.files[0]); e.target.value = ''; };
+$('btnDefault').onclick = () => { setTextureFrom(makeDefaultRug()); layout(); buildCloth(); };
+$('btnFlat').onclick = () => { release(); cloth.flatten(); };
+$('size').addEventListener('input', layout);
+$('stiff').addEventListener('input', () => { $('vStiff').textContent = $('stiff').value; cloth.setBend(+$('stiff').value / 100); });
+addEventListener('resize', layout);
+
+addEventListener('dragover', e => { e.preventDefault(); $('drop').style.display = 'flex'; });
+addEventListener('dragleave', e => { if (!e.relatedTarget) $('drop').style.display = 'none'; });
+addEventListener('drop', e => { e.preventDefault(); $('drop').style.display = 'none'; loadFile(e.dataTransfer.files[0]); });
+addEventListener('paste', e => { for (const it of e.clipboardData.items) if (it.type.startsWith('image/')) { loadFile(it.getAsFile()); break; } });
+
+/* ---------------------------------------------------------------- render */
+let last = performance.now(), acc = 0;
+const STEP = 1 / 60;
+const TAPS = [[0, 0], [5, 0], [-5, 0], [0, 5], [0, -5], [3.5, 3.5], [-3.5, -3.5], [3.5, -3.5], [-3.5, 3.5]];
+function frame(now) {
+  acc += Math.min(0.1, (now - last) / 1000); last = now;
+  for (let i = 0; acc >= STEP && i < 4; i++, acc -= STEP) cloth.step(STEP);
+  if (acc > STEP) acc = 0;
+  uploadCloth();
+
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.useProgram(prog); gl.bindVertexArray(vao);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(U.u_tex, 0);
+  gl.uniform2f(U.u_origin, originX, originY); gl.uniform2f(U.u_view, vw, vh);
+  gl.uniform1f(U.u_backDark, 0.8);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+  // 1) 그림자: 여러 번 살짝 어긋나게 그려서 부드럽게
+  gl.disable(gl.DEPTH_TEST); gl.uniform1f(U.u_pass, 0); gl.uniform1f(U.u_shadowA, 0.07);
+  for (const t of TAPS) { gl.uniform2f(U.u_tap, t[0], t[1]); gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0); }
+  // 2) 러그
+  gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.uniform1f(U.u_pass, 1);
+  gl.drawElements(gl.TRIANGLES, indexCount, gl.UNSIGNED_INT, 0);
+  requestAnimationFrame(frame);
+}
+
+/* ------------------------------------------------------------------ boot */
+setTextureFrom(makeDefaultRug());
+layout();
+
+// 테스트용: ?t=fold | push | half | refold | big  (동기적으로 포인터 이벤트 + 시뮬레이션 프레임을 재현)
+(() => {
+  const q = new URLSearchParams(location.search), t = q.get('t');
+  if (q.has('nopanel')) $('panel').style.display = 'none';
+  if (!t) return;
+  if (t === 'big') { $('size').value = 900; layout(); }
+  const fire = (type, x, y) => canvas.dispatchEvent(new PointerEvent(type, { clientX: originX + x, clientY: originY + y, button: 0, pointerId: 1, bubbles: true }));
+  const wait = n => { for (let i = 0; i < n; i++) cloth.step(STEP); };
+  const drag = (x0, y0, x1, y1, steps, framesPer) => {
+    fire('pointerdown', x0, y0);
+    for (let i = 1; i <= steps; i++) { fire('pointermove', x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps); wait(framesPer); }
+    wait(10); fire('pointerup', x1, y1);
+  };
+  const W = rugW, H = rugH;
+  // 기본 러그는 좌우 술 때문에 본체가 이미지 안쪽(약 7%~93%)에 있음
+  const rx = W * 0.915, by = H * 0.955;
+  if (t === 'fold' || t === 'big') { drag(rx, by, W * 0.45, H * 0.4, 40, 2); wait(150); }
+  if (t === 'push') { drag(W * 0.2, H * 0.5, W * 0.62, H * 0.5, 40, 2); wait(150); }
+  if (t === 'half') { drag(rx, H * 0.5, W * 0.2, H * 0.5, 50, 2); wait(150); }
+  if (t === 'refold') {   // 접고 -> 접힌 모서리를 다시 잡아 되돌려 펴기
+    drag(rx, by, W * 0.45, H * 0.4, 40, 2); wait(150);
+    // 처음 잡았던 모서리 근처 입자가 지금 접힌 끝
+    let k = Math.floor(0.915 * (cloth.nx - 1)) + Math.floor(0.955 * (cloth.ny - 1)) * cloth.nx, z = cloth.pos[3 * k + 2];
+    const sx = cloth.pos[3 * k] + 0.12 * z, sy = cloth.pos[3 * k + 1] - 0.45 * z;
+    drag(sx, sy, rx, by, 40, 2); wait(150);
+  }
+})();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
