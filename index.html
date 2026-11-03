@@ -184,6 +184,7 @@
 <div id="drop">이미지를 놓으세요</div>
 
 <script src="cloth.js"></script>
+<script src="rug-default.js"></script>
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
@@ -394,38 +395,6 @@ function loadFile(file) {
   img.src = url;
 }
 
-function makeDefaultRug() {
-  const W = 1024, H = 640, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const g = c.getContext('2d');
-  const bx = 74, by = 16, bw = W - 148, bh = H - 32;
-  // 술(프린지)
-  g.strokeStyle = '#eadfc4'; g.lineWidth = 3.2; g.lineCap = 'round';
-  for (let y = by + 8; y < by + bh - 4; y += 9) {
-    for (const s of [-1, 1]) {
-      const x0 = s < 0 ? bx + 4 : bx + bw - 4;
-      g.beginPath(); g.moveTo(x0, y);
-      g.quadraticCurveTo(x0 + s * 34, y + Math.sin(y * 1.7) * 7, x0 + s * 64, y + Math.cos(y * 2.9) * 9);
-      g.stroke();
-    }
-  }
-  g.fillStyle = '#7d1f2b'; g.fillRect(bx, by, bw, bh);
-  const frame = (inset, w, col) => { g.strokeStyle = col; g.lineWidth = w; g.strokeRect(bx + inset, by + inset, bw - inset * 2, bh - inset * 2); };
-  frame(5, 6, '#eadfc4'); frame(30, 34, '#1d3a5c'); frame(54, 4, '#eadfc4'); frame(64, 10, '#c79a3a');
-  g.save(); g.beginPath(); g.rect(bx + 80, by + 80, bw - 160, bh - 160); g.clip();
-  const cx = W / 2, cy = H / 2;
-  const diamond = (rx, ry, col) => { g.fillStyle = col; g.beginPath(); g.moveTo(cx, cy - ry); g.lineTo(cx + rx, cy); g.lineTo(cx, cy + ry); g.lineTo(cx - rx, cy); g.closePath(); g.fill(); };
-  diamond(330, 210, '#c79a3a'); diamond(310, 195, '#1d3a5c'); diamond(255, 158, '#7d1f2b');
-  diamond(205, 126, '#eadfc4'); diamond(190, 116, '#2d6a5b'); diamond(120, 74, '#7d1f2b'); diamond(52, 32, '#c79a3a');
-  for (let i = 0; i < 12; i++) {
-    const a = i / 12 * Math.PI * 2;
-    g.fillStyle = '#eadfc4'; g.beginPath(); g.arc(cx + Math.cos(a) * 160, cy + Math.sin(a) * 100, 6, 0, 7); g.fill();
-  }
-  g.restore();
-  for (let y = by; y < by + bh; y += 3) { g.fillStyle = (y / 3) % 2 ? 'rgba(0,0,0,.07)' : 'rgba(255,255,255,.035)'; g.fillRect(bx, y, bw, 1.5); }
-  for (let i = 0; i < 9000; i++) { g.fillStyle = Math.random() < .5 ? 'rgba(0,0,0,.08)' : 'rgba(255,255,255,.06)'; g.fillRect(bx + Math.random() * bw, by + Math.random() * bh, 2, 2); }
-  return c;
-}
-
 /* ------------------------------------------------------------ layout/state */
 let dpr = 1, vw = 0, vh = 0;
 let rugW = 520, rugH = 325;
@@ -532,7 +501,7 @@ $('fab').onclick = () => $('panel').classList.toggle('open');
 $('btnClose').onclick = () => $('panel').classList.remove('open');
 $('btnOpen').onclick = () => $('file').click();
 $('file').onchange = e => { loadFile(e.target.files[0]); e.target.value = ''; };
-$('btnDefault').onclick = () => { $('bgRemove').checked = false; setTextureFrom(makeDefaultRug()); layout(); buildCloth(); };
+$('btnDefault').onclick = () => { $('bgRemove').checked = false; loadDefaultRug(); };
 $('btnFlat').onclick = () => { release(); cloth.flatten(); };
 let bgTimer = 0;
 const applyBg = () => {
@@ -581,8 +550,15 @@ function frame(now) {
 }
 
 /* ------------------------------------------------------------------ boot */
-setTextureFrom(makeDefaultRug());
+// 기본 러그: 토끼 그림 (rug-default.js의 data URL). 불러오는 동안은 투명 1x1로 시작한다.
+function loadDefaultRug() {
+  const img = new Image();
+  img.onload = () => { setTextureFrom(img); layout(); buildCloth(); if (!touched) { placeInitial(); syncOrigin(); } };
+  img.src = DEFAULT_RUG_URL;
+}
+setTextureFrom(document.createElement('canvas'));
 layout(true);
+loadDefaultRug();
 
 // 테스트용: ?t=fold | push | half | refold | big  (동기적으로 포인터 이벤트 + 시뮬레이션 프레임을 재현)
 (() => {
