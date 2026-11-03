@@ -78,6 +78,7 @@
   #panel label span { float: right; color: #888; }
   #panel label.chk { display: flex; align-items: center; gap: 6px; color: #333; font-size: 12.5px; }
   #panel input[type=range] { width: 100%; margin: 2px 0 0; }
+  #panel .note { margin-top: 4px; font-size: 11.5px; color: #888; }
   #panel .row { display: flex; gap: 6px; margin-top: 10px; }
   #panel button { flex: 1; padding: 9px 0; border: 0; border-radius: 7px; cursor: pointer; background: #e4e4e8; font: inherit; }
   #panel button:hover { background: #d6d6dc; }
@@ -154,16 +155,18 @@
 
 <div id="bar">
   <button id="btnOpen" type="button" class="main">📷 사진 첨부</button>
-  <label class="sz">크기 <input id="size" type="range" min="160" max="1100" value="520" aria-label="러그 크기"><span id="vSize"></span></label>
+  <label class="sz">크기 <input id="size" type="range" min="160" max="500" value="500" aria-label="러그 크기"><span id="vSize"></span></label>
   <button id="btnFlat" type="button">펴기</button>
   <button id="fab" type="button">⚙</button>
 </div>
 <input id="file" type="file" accept="image/*" hidden>
 <div id="panel">
   <h3>러그 설정</h3>
-  <div class="row" style="margin-top:0">
-    <button id="btnDefault">기본 러그로 되돌리기</button>
-  </div>
+  <label class="chk" style="margin-top:0"><input id="bgRemove" type="checkbox"> <b>사진 배경 제거</b></label>
+  <label>제거 강도 <span id="vTol"></span>
+    <input id="bgTol" type="range" min="5" max="120" value="40"></label>
+  <div class="note">테두리 색과 비슷하고 가장자리에서 이어진 부분을 지웁니다. 배경이 단색일 때 잘 됩니다.</div>
+  <div class="row"><button id="btnDefault">기본 러그로 되돌리기</button></div>
 
   <label>뻣뻣함 <span id="vStiff"></span>
     <input id="stiff" type="range" min="5" max="90" value="35"></label>
@@ -299,14 +302,62 @@ function maskAlpha(u, v) {
 }
 
 // 어떤 이미지든 캔버스를 거쳐 올림: 크기 제한 + 알파 프리멀티플라이 일관성 확보
+let baseCanvas = null;                       // 원본(배경 제거 전) 이미지
 function setTextureFrom(source) {
   const sw = source.naturalWidth || source.width, sh = source.naturalHeight || source.height;
-  const sc = Math.min(1, 2048 / Math.max(sw, sh));
+  const sc = Math.min(1, 1024 / Math.max(sw, sh));   // 러그가 최대 500px이라 1024면 충분
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.round(sw * sc)); c.height = Math.max(1, Math.round(sh * sc));
   const g = c.getContext('2d', { willReadFrequently: true });
   g.drawImage(source, 0, 0, c.width, c.height);
+  baseCanvas = c;
+  uploadTexture();
+}
 
+// 배경 제거: 가장자리 색을 배경으로 보고, 가장자리에서 이어진 비슷한 색 영역만 투명하게 만든다 (flood fill)
+function removeBackground(src, tol) {
+  const w = src.width, h = src.height;
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  const og = out.getContext('2d', { willReadFrequently: true });
+  og.drawImage(src, 0, 0);
+  const img = og.getImageData(0, 0, w, h), d = img.data;
+  // 배경색 추정: 테두리 픽셀 색의 중앙값
+  const rs = [], gs = [], bs = [];
+  const sample = (x, y) => { const i = (y * w + x) * 4; if (d[i + 3] > 200) { rs.push(d[i]); gs.push(d[i + 1]); bs.push(d[i + 2]); } };
+  for (let x = 0; x < w; x += 3) { sample(x, 0); sample(x, h - 1); }
+  for (let y = 0; y < h; y += 3) { sample(0, y); sample(w - 1, y); }
+  if (!rs.length) return out;                      // 이미 가장자리가 투명한 PNG
+  const med = a => { a.sort((p, q) => p - q); return a[a.length >> 1]; };
+  const br = med(rs), bg = med(gs), bb = med(bs);
+  const lim = tol * tol * 3;                       // tol = RGB 한 채널 기준 허용 오차
+  const bgm = new Uint8Array(w * h);               // 1 = 배경
+  const stack = [];
+  const near = p => { const i = p * 4; if (d[i + 3] < 8) return true; const dr = d[i] - br, dg = d[i + 1] - bg, db = d[i + 2] - bb; return dr * dr + dg * dg + db * db <= lim; };
+  const push = p => { if (!bgm[p] && near(p)) { bgm[p] = 1; stack.push(p); } };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (stack.length) {
+    const p = stack.pop(), x = p % w;
+    if (x > 0) push(p - 1);
+    if (x < w - 1) push(p + 1);
+    if (p >= w) push(p - w);
+    if (p < w * (h - 1)) push(p + w);
+  }
+  // 경계를 1px 부드럽게: 배경 이웃 비율만큼 알파를 깎는다 (3x3)
+  const a = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let s = 0, n = 0;
+    for (let dy = -1; dy <= 1; dy++) { const yy = y + dy; if (yy < 0 || yy >= h) continue;
+      for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if (xx < 0 || xx >= w) continue; s += bgm[yy * w + xx]; n++; } }
+    a[y * w + x] = bgm[y * w + x] ? 0 : Math.max(0, 1 - (s / n) * 1.5);
+  }
+  for (let p = 0; p < w * h; p++) d[p * 4 + 3] = Math.round(d[p * 4 + 3] * a[p]);
+  og.putImageData(img, 0, 0);
+  return out;
+}
+
+function uploadTexture() {
+  const c = $('bgRemove') && $('bgRemove').checked ? removeBackground(baseCanvas, +$('bgTol').value) : baseCanvas;
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -331,7 +382,11 @@ function loadFile(file) {
   if (!file || !file.type.startsWith('image/')) return;
   const url = URL.createObjectURL(file);
   const img = new Image();
-  img.onload = () => { setTextureFrom(img); URL.revokeObjectURL(url); layout(); buildCloth(); };
+  img.onload = () => {
+    $('bgRemove').checked = false;
+    setTextureFrom(img); URL.revokeObjectURL(url); layout(); buildCloth();
+    $('panel').classList.add('open');              // 배경 제거 옵션이 바로 보이게
+  };
   img.onerror = () => alert('이미지를 읽을 수 없습니다.');
   img.src = url;
 }
@@ -389,8 +444,8 @@ function placeInitial() {
 addEventListener('load', () => { if (!touched && cloth) { placeInitial(); syncOrigin(); } });   // 사진이 로드되어 높이가 정해진 뒤 재배치
 
 function layout(first) {
-  if (first) $('size').value = innerWidth < 720 ? Math.max(160, Math.round(innerWidth * 0.62)) : 520;
-  const newW = +$('size').value, newH = newW * imgH / imgW;
+  if (first) $('size').value = innerWidth < 720 ? Math.max(160, Math.round(innerWidth * 0.62)) : 500;
+  const newW = Math.round(Math.min(+$('size').value, 500 * Math.min(1, imgW / imgH))), newH = newW * imgH / imgW;   // 긴 변도 500px 이하 (세로 사진이 렉 걸리지 않게)
   const sizeChanged = !cloth || newW !== rugW || Math.abs(newH - rugH) > 0.5;
   let cx = null, cy = null;
   if (cloth && sizeChanged) { const c = cloth.centroid(); cx = docX + c.x; cy = docY + c.y; }   // 크기를 바꿔도 중심 유지
@@ -473,8 +528,17 @@ window.addEventListener('touchmove', e => { if (grabMode) e.preventDefault(); },
 $('fab').onclick = () => $('panel').classList.toggle('open');
 $('btnOpen').onclick = () => $('file').click();
 $('file').onchange = e => { loadFile(e.target.files[0]); e.target.value = ''; };
-$('btnDefault').onclick = () => { setTextureFrom(makeDefaultRug()); layout(); buildCloth(); };
+$('btnDefault').onclick = () => { $('bgRemove').checked = false; setTextureFrom(makeDefaultRug()); layout(); buildCloth(); };
 $('btnFlat').onclick = () => { release(); cloth.flatten(); };
+let bgTimer = 0;
+const applyBg = () => {
+  $('vTol').textContent = $('bgTol').value;
+  clearTimeout(bgTimer);
+  bgTimer = setTimeout(() => { release(); uploadTexture(); layout(); buildCloth(); }, 120);
+};
+$('bgRemove').addEventListener('change', applyBg);
+$('bgTol').addEventListener('input', () => { if ($('bgRemove').checked) applyBg(); else $('vTol').textContent = $('bgTol').value; });
+$('vTol').textContent = $('bgTol').value;
 $('size').addEventListener('input', () => layout());
 $('stiff').addEventListener('input', () => { $('vStiff').textContent = $('stiff').value; cloth.setBend(+$('stiff').value / 100); });
 addEventListener('resize', () => layout());
