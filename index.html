@@ -47,9 +47,13 @@
   .toc a { color: var(--link); text-decoration: none; }
   .toc a:hover { text-decoration: underline; }
   .toc .n { color: #555; margin-right: .35em; }
+  .toc ol ol { padding-left: 1.5em; }
+  .toc ol ol li { line-height: 1.8; }
 
   h2 { font-size: 1.5rem; line-height: 1.4; margin: 30px 0 12px; padding-bottom: 5px; border-bottom: 1px solid var(--line); scroll-margin-top: 12px; }
   h2 a.n { color: var(--green); text-decoration: none; margin-right: .4em; }
+  h3 { font-size: 1.2rem; line-height: 1.4; margin: 20px 0 8px; scroll-margin-top: 12px; }
+  h3 a.n { color: var(--green); text-decoration: none; margin-right: .4em; }
   p { margin: 0 0 10px; }
   ul { margin: 0 0 10px; padding-left: 1.4em; }
   details.fold { margin: 14px 0 10px; border: 1px solid #ccc; background: #fff; }
@@ -101,6 +105,7 @@
   @media (max-width: 720px) {
     h1.title { font-size: 1.6rem; }
     h2 { font-size: 1.3rem; }
+    h3 { font-size: 1.12rem; }
     .infobox { float: none; width: 100%; margin: 4px 0 16px; }
     .infobox img { max-height: 420px; object-fit: cover; object-position: 50% 30%; }
     #bar { gap: 5px; padding: 6px; font-size: 12.5px; }
@@ -139,8 +144,16 @@
       <b>목차</b>
       <ol>
         <li><a href="#sec1"><span class="n">1.</span>개요</a></li>
-        <li><a href="#sec2"><span class="n">2.</span>활동</a></li>
-        <li><a href="#sec3"><span class="n">3.</span>특징</a></li>
+        <li><a href="#sec2"><span class="n">2.</span>활동</a>
+          <ol>
+            <li><a href="#sec2-1"><span class="n">2.1.</span>입대</a></li>
+            <li><a href="#sec2-2"><span class="n">2.2.</span>군 생활</a></li>
+          </ol></li>
+        <li><a href="#sec3"><span class="n">3.</span>특징</a>
+          <ol>
+            <li><a href="#sec3-1"><span class="n">3.1.</span>성향과 취미</a></li>
+            <li><a href="#sec3-2"><span class="n">3.2.</span>음식 취향</a></li>
+          </ol></li>
         <li><a href="#sec4"><span class="n">4.</span>논란</a></li>
       </ol>
     </nav>
@@ -149,10 +162,14 @@
     <p><b>최현우</b>는 하늘이의 남자친구이다.</p>
 
     <h2 id="sec2"><a class="n" href="#top">2.</a>활동</h2>
+    <h3 id="sec2-1"><a class="n" href="#top">2.1.</a>입대</h3>
     <p>2025년 10월 13일에 카투사로 입대하여 현재 군인 신분이다. (2027년 4월 12일 전역 예정)</p>
+
+    <h3 id="sec2-2"><a class="n" href="#top">2.2.</a>군 생활</h3>
     <p>군대에서는 피엑스병으로 활동 중이다.</p>
 
     <h2 id="sec3"><a class="n" href="#top">3.</a>특징</h2>
+    <h3 id="sec3-1"><a class="n" href="#top">3.1.</a>성향과 취미</h3>
     <ul>
       <li>시기마다 하나의 캐릭터에 꽂혀서 관련 선물을 하면 세상 행복해 한다.</li>
       <li>입대한 후로 헬창이 되어서 아침, 점심, 저녁으로 헬스장에 출석한다.</li>
@@ -165,8 +182,9 @@
       <li>흔히 말하는 왼얼사이다. 이유는 눈 때문이다.</li>
     </ul>
 
+    <h3 id="sec3-2"><a class="n" href="#top">3.2.</a>음식 취향</h3>
     <details class="fold" open>
-      <summary>음식 취향</summary>
+      <summary>음식 관련 특징</summary>
       <ul>
         <li>해산물을 굉장히 좋아하지만 고기를 더 좋아한다. 다만 비계 부분은 싫어하여 하늘이와 원만한 합의 끝에 비계 부위는 하늘이가 다 먹게 되었다. (하늘이는 비계를 짱짱 좋아한다.)</li>
         <li>떡, 화과자, 양갱, 비비빅 등을 좋아하여 생각보다 늙은 입맛을 보유하고 있다.</li>
