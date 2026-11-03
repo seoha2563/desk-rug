@@ -74,6 +74,7 @@
   }
   #panel.open { display: block; }
   #panel h3 { font-size: 14px; margin: 0 0 10px; }
+  #panel #btnClose { position: absolute; top: 8px; right: 8px; flex: none; width: 30px; height: 30px; padding: 0; border-radius: 15px; background: #eee; font-size: 14px; line-height: 1; }
   #panel label { display: block; margin-top: 10px; font-size: 12px; color: #555; }
   #panel label span { float: right; color: #888; }
   #panel label.chk { display: flex; align-items: center; gap: 6px; color: #333; font-size: 12.5px; }
@@ -161,6 +162,7 @@
 </div>
 <input id="file" type="file" accept="image/*" hidden>
 <div id="panel">
+  <button id="btnClose" type="button" aria-label="닫기">✕</button>
   <h3>러그 설정</h3>
   <label class="chk" style="margin-top:0"><input id="bgRemove" type="checkbox"> <b>사진 배경 제거</b></label>
   <label>제거 강도 <span id="vTol"></span>
@@ -526,6 +528,7 @@ window.addEventListener('touchstart', e => {
 window.addEventListener('touchmove', e => { if (grabMode) e.preventDefault(); }, { passive: false });
 
 $('fab').onclick = () => $('panel').classList.toggle('open');
+$('btnClose').onclick = () => $('panel').classList.remove('open');
 $('btnOpen').onclick = () => $('file').click();
 $('file').onchange = e => { loadFile(e.target.files[0]); e.target.value = ''; };
 $('btnDefault').onclick = () => { $('bgRemove').checked = false; setTextureFrom(makeDefaultRug()); layout(); buildCloth(); };
