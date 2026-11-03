@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <title>최현우 - 하늘위키</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&text=%ED%95%98%EB%8A%98%EC%9C%84%ED%82%A4&display=swap">
 <style>
   :root { --green: #00a495; --link: #0275d8; --line: #ddd; }
   * { box-sizing: border-box; }
@@ -18,9 +20,11 @@
   body.dragging, body.dragging * { cursor: grabbing !important; }
 
   /* ---- 상단 바 ---- */
-  #top { background: var(--green); height: 52px; }
-  #top .in { max-width: 1100px; height: 100%; margin: 0 auto; padding: 0 16px; display: flex; align-items: center;
-             color: #fff; font-weight: 700; font-size: 20px; letter-spacing: -.5px; }
+  #top { background: var(--green); height: 60px; }
+  #top .in { max-width: 1100px; height: 100%; margin: 0 auto; padding: 0 16px; display: flex; align-items: center; }
+  #top .logo { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none;
+               font-family: "Jua", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-size: 31px; font-weight: 400; letter-spacing: .16em; line-height: 1; }
+  #top .logo span { transform: translateY(1px); }
 
   /* ---- 문서 ---- */
   #doc { max-width: 1100px; margin: 0 auto; padding: 14px 16px 56px; }
@@ -102,7 +106,12 @@
 </style>
 </head>
 <body>
-<header id="top"><div class="in">하늘위키</div></header>
+<header id="top"><div class="in"><a class="logo" href="./" aria-label="하늘위키">
+  <svg viewBox="0 0 44 30" width="46" height="31" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M7 22 L19 11 L25 21 L37 8"/><path d="M25 21 L36 25"/>
+    <circle cx="7" cy="22" r="3.6" fill="#00a495"/><circle cx="19" cy="11" r="3.6" fill="#00a495"/>
+    <circle cx="25" cy="21" r="3.6" fill="#00a495"/><circle cx="37" cy="8" r="3.6" fill="#00a495"/><circle cx="37" cy="25" r="2.6" fill="#00a495"/>
+  </svg><span>하늘위키</span></a></div></header>
 
 <main id="doc">
   <div class="crumb">문서</div>
